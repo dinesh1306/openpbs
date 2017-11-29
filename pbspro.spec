@@ -75,7 +75,7 @@ BuildRoot: %{buildroot}
 BuildRequires: gcc
 BuildRequires: make
 BuildRequires: rpm-build
-BuildRequires: autoconf >=2.69
+BuildRequires: autoconf >= 2.69
 BuildRequires: automake
 BuildRequires: libtool
 BuildRequires: hwloc-devel
