@@ -35,7 +35,7 @@
 #  trademark licensing policies.
 #
 
-AC_PREREQ([2.63])
+AC_PREREQ([2.69])
 AC_INIT([pbspro], [17.1.0], [pbssupport@altair.com])
 AC_CONFIG_HEADERS([src/include/pbs_config.h])
 AC_CONFIG_SRCDIR([src/cmds/qmgr.c])
