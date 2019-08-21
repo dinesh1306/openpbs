@@ -14613,62 +14613,104 @@ class PBSInitServices(object):
         :type daemon: str
         """
         init_cmd = copy.copy(self.du.sudo_cmd)
-        if daemon is not None and daemon != 'all':
-            conf = self.du.parse_pbs_config(hostname, conf_file)
-            dconf = {
-                'PBS_START_SERVER': 0,
-                'PBS_START_MOM': 0,
-                'PBS_START_SCHED': 0,
-                'PBS_START_COMM': 0
-            }
-            if daemon == 'server' and conf.get('PBS_START_SERVER', 0) != 0:
-                dconf['PBS_START_SERVER'] = 1
-            elif daemon == 'mom' and conf.get('PBS_START_MOM', 0) != 0:
-                dconf['PBS_START_MOM'] = 1
-            elif daemon == 'sched' and conf.get('PBS_START_SCHED', 0) != 0:
-                dconf['PBS_START_SCHED'] = 1
-            elif daemon == 'comm' and conf.get('PBS_START_COMM', 0) != 0:
-                dconf['PBS_START_COMM'] = 1
-            for k, v in dconf.items():
-                init_cmd += ["%s=%s" % (k, str(v))]
-            _as = True
-        else:
-            fn = None
-            if (conf_file is not None) and (conf_file != self.dflt_conf_file):
-                init_cmd += ['PBS_CONF_FILE=' + conf_file]
+        is_systemctl = self.du.which(exe='systemctl')
+        is_service = self.du.which(exe='service')
+        service_cmd = [is_service, 'pbs', 'status']
+        ret = self.du.run_cmd(hostname, service_cmd)
+        if (daemon != 'all' and (is_systemctl == 'systemctl' or
+                                 os.path.exists('/.dockerenv') or
+                                 ((op == 'stop') and ret['rc'] != 0))):
+            if daemon is not None and daemon != 'all':
+                conf = self.du.parse_pbs_config(hostname, conf_file)
+                dconf = {
+                    'PBS_START_SERVER': 0,
+                    'PBS_START_MOM': 0,
+                    'PBS_START_SCHED': 0,
+                    'PBS_START_COMM': 0
+                }
+                if daemon == 'server' and conf.get('PBS_START_SERVER', 0) != 0:
+                    dconf['PBS_START_SERVER'] = 1
+                elif daemon == 'mom' and conf.get('PBS_START_MOM', 0) != 0:
+                    dconf['PBS_START_MOM'] = 1
+                elif daemon == 'sched' and conf.get('PBS_START_SCHED', 0) != 0:
+                    dconf['PBS_START_SCHED'] = 1
+                elif daemon == 'comm' and conf.get('PBS_START_COMM', 0) != 0:
+                    dconf['PBS_START_COMM'] = 1
+                for k, v in dconf.items():
+                    init_cmd += ["%s=%s" % (k, str(v))]
                 _as = True
             else:
-                _as = False
-            conf = self.du.parse_pbs_config(hostname, conf_file)
-        if (init_script is None) or (not init_script.startswith('/')):
-            if 'PBS_EXEC' not in conf:
-                msg = 'Missing PBS_EXEC setting in pbs config'
-                raise PbsInitServicesError(rc=1, rv=False, msg=msg)
-            if init_script is None:
-                init_script = os.path.join(conf['PBS_EXEC'], 'libexec',
-                                           'pbs_init.d')
+                fn = None
+                if ((conf_file is not None) and
+                        (conf_file != self.dflt_conf_file)):
+                    init_cmd += ['PBS_CONF_FILE=' + conf_file]
+                    _as = True
+                else:
+                    _as = False
+                conf = self.du.parse_pbs_config(hostname, conf_file)
+            if (init_script is None) or (not init_script.startswith('/')):
+                if 'PBS_EXEC' not in conf:
+                    msg = 'Missing PBS_EXEC setting in pbs config'
+                    raise PbsInitServicesError(rc=1, rv=False, msg=msg)
+                if init_script is None:
+                    init_script = os.path.join(conf['PBS_EXEC'], 'libexec',
+                                               'pbs_init.d')
+                else:
+                    init_script = os.path.join(conf['PBS_EXEC'], 'etc',
+                                               init_script)
+                if not self.du.isfile(hostname, path=init_script, sudo=True):
+                    # Could be Type 3 installation where we will not have
+                    # PBS_EXEC/libexec/pbs_init.d
+                    return []
+            init_cmd += [init_script, op]
+            msg = 'running init script to ' + op + ' pbs'
+            if daemon is not None and daemon != 'all':
+                msg += ' ' + daemon
+            msg += ' on ' + hostname
+            if conf_file is not None:
+                msg += ' using ' + conf_file
+            msg += ' init_cmd=%s' % (str(init_cmd))
+            self.logger.info(msg)
+            ret = self.du.run_cmd(hostname, init_cmd, as_script=_as,
+                                  logerr=False)
+            if ret['rc'] != 0:
+                raise PbsInitServicesError(rc=ret['rc'], rv=False,
+                                           msg='\n'.join(ret['err']))
             else:
-                init_script = os.path.join(conf['PBS_EXEC'], 'etc',
-                                           init_script)
-            if not self.du.isfile(hostname, path=init_script, sudo=True):
-                # Could be Type 3 installation where we will not have
-                # PBS_EXEC/libexec/pbs_init.d
-                return []
-        init_cmd += [init_script, op]
-        msg = 'running init script to ' + op + ' pbs'
-        if daemon is not None and daemon != 'all':
-            msg += ' ' + daemon
-        msg += ' on ' + hostname
-        if conf_file is not None:
-            msg += ' using ' + conf_file
-        msg += ' init_cmd=%s' % (str(init_cmd))
-        self.logger.info(msg)
-        ret = self.du.run_cmd(hostname, init_cmd, as_script=_as,
-                              logerr=False)
-        if ret['rc'] != 0:
-            raise PbsInitServicesError(rc=ret['rc'], rv=False,
-                                       msg='\n'.join(ret['err']))
+                return ret
         else:
+            cmd = [is_systemctl, "daemon-reload"]
+            out = self.du.run_cmd(hostname, cmd, True)
+            if out['rc'] == 0:
+                systemctl_cmd = [is_systemctl, op, 'pbs']
+                msg = 'running systemctl command to ' + op + ' pbs'
+                self.logger.info(msg)
+                ret = self.du.run_cmd(hostname, systemctl_cmd, True)
+                if ret['rc'] != 0:
+                    raise PbsInitServicesError(rc=ret['rc'], rv=False,
+                                               msg='\n'.join(ret['err']))
+                else:
+                    if op is 'start':
+                        server = Server()
+                        for i in range(0, 10, 1):
+                            lic = server.status(SERVER, 'license_count',
+                                                level=logging.INFOCLI)
+                            if lic and 'license_count' in lic[0]:
+                                lic = PbsTypeLicenseCount(
+                                    lic[0]['license_count'])
+                            if (('Avail_Nodes' in lic) and
+                                    (int(lic['Avail_Nodes']) > 0)):
+                                break
+                            elif (('Avail_Sockets' in lic) and
+                                  (int(lic['Avail_Sockets']) > 0)):
+                                break
+                            elif (('Avail_Global' in lic) and
+                                  (int(lic['Avail_Global']) > 0)):
+                                break
+                            elif (('Avail_Local' in lic) and
+                                 (int(lic['Avail_Local']) > 0)):
+                                break
+                            time.sleep(i)
             return ret
 
     def switch_version(self, hostname=None, version=None):
