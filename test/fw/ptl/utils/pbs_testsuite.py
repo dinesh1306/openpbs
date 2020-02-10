@@ -1,6 +1,6 @@
 # coding: utf-8
 
-# Copyright (C) 1994-2020 Altair Engineering, Inc.
+# Copyright (C) 1994-2019 Altair Engineering, Inc.
 # For more information, contact Altair at www.altair.com.
 #
 # This file is part of the PBS Professional ("PBS Pro") software.
@@ -76,7 +76,6 @@ NUMNODES = 'numnodes'
 TIMEOUT_KEY = '__testcase_timeout__'
 MINIMUM_TESTCASE_TIMEOUT = 600
 REQUIREMENTS_KEY = '__PTL_REQS_LIST__'
-# IS_UPGRADE = False
 
 # unit of min_ram and min_disk is GB
 default_requirements = {
@@ -110,19 +109,7 @@ def skip(reason="Skipped test execution"):
     return wrapper
 
 
-def upgrade(function):
-
-    def wrapper(self, *args, **kwargs):
-        self.parse_params()
-        function(self, *args, **kwargs)
-        self.upgrade_tearDown()
-
-    wrapper.__doc__ = function.__doc__
-    wrapper.__name__ = function.__name__
-    return wrapper
-
-
-def timeout(function):
+def timeout(val):
     """
     Decorator to set timeout value of test case
     """
@@ -211,6 +198,16 @@ def requirements(*args, **kwargs):
     return wrap_obj
 
 
+def upgrade(function):
+    def wrapper(self, *args, **kwargs):
+         self.parse_params()
+         function(self, *args, **kwargs)
+         self.upgrade_tearDown()
+    wrapper.__doc__ = function.__doc__
+    wrapper.__name__ = function.__name__
+    return wrapper
+
+
 def testparams(**kwargs):
     """
     Decorator to set or modify test specific parameters
@@ -223,7 +220,7 @@ def testparams(**kwargs):
         def wrapper(self, *args):
             for key, value in kwargs.items():
                 keyname = type(self).__name__ + "." + key
-                if keyname not in cls.conf.keys():
+                if keyname not in self.conf.keys():
                     self.conf[keyname] = value
                     self.testconf[keyname] = value
                 else:
@@ -431,7 +428,6 @@ class PBSTestSuite(unittest.TestCase):
     testconf = {}
     param = None
     du = DshUtils()
-    upgrade = None
     _procmon = None
     _process_monitoring = False
     revert_to_defaults = True
@@ -455,7 +451,6 @@ class PBSTestSuite(unittest.TestCase):
     scheds = {}
     moms = None
     comms = None
-    is_upgrade = False
 
     @classmethod
     def setUpClass(cls):
@@ -646,44 +641,6 @@ class PBSTestSuite(unittest.TestCase):
                     return True
             time.sleep(i)
         return False
-
-    def parse_params(self):
-        msg = "PLEASE PROVIDE PROPER PARAMS"
-        if ('base_pbs_path' in self.conf.keys()) and (
-                'upgrade_pbs_path' in self.conf.keys()):
-            if self.du.isdir(
-                    path=self.conf['base_pbs_path']) and self.du.isdir(
-                    path=self.conf['upgrade_pbs_path']):
-                self.base_pbs_path = self.conf['base_pbs_path']
-                self.upgrade_pbs_path = self.conf['upgrade_pbs_path']
-            else:
-                msg = "PBS dir is not present"
-                self.skipTest(msg)
-        else:
-            self.skipTest(msg)
-        if ('base_ptl_path' in self.conf.keys()) and (
-                'upgrade_ptl_path' in self.conf.keys()):
-            if self.du.isdir(
-                    path=self.conf['base_ptl_path']) and self.du.isdir(
-                    path=self.conf['upgrade_ptl_path']):
-                self.upgrade_ptl_path = self.conf['upgrade_ptl_path']
-                self.base_ptl_path = self.conf['base_ptl_path']
-            else:
-                msg = "PTL params are not present"
-                self.skipTest(msg)
-        else:
-            self.skipTest(msg)
-        self.upgrade_lic = None
-        if 'upgrade_lic' in self.conf.keys():
-            if self.du.isfile(path=self.conf['upgrade_lic']):
-                self.upgrade_lic = self.conf['upgrade_lic']
-            elif '@' in self.conf['lic']:
-                response = os.system("ping -c 4 " + cls.conf['upgrade_lic'])
-                if response == 0:
-                    self.lic = self.conf['lic']
-            else:
-                msg = "Upgrade license is not proper"
-                self.skipTest(msg)
 
     @classmethod
     def init_from_conf(cls, conf, single=None, multiple=None, skip=None,
@@ -876,7 +833,7 @@ class PBSTestSuite(unittest.TestCase):
         """
         try:
             server = cls.servers[server]
-        except BaseException:
+        except:
             server = None
         return Comm(hostname, pbsconf_file=pbsconf_file, server=server)
 
@@ -896,7 +853,7 @@ class PBSTestSuite(unittest.TestCase):
         """
         try:
             server = cls.servers[server]
-        except BaseException:
+        except:
             server = None
         return Scheduler(hostname=hostname, server=server,
                          pbsconf_file=pbsconf_file)
@@ -916,7 +873,7 @@ class PBSTestSuite(unittest.TestCase):
         """
         try:
             server = cls.servers[server]
-        except BaseException:
+        except:
             server = None
         return MoM(hostname, pbsconf_file=pbsconf_file, server=server)
 
@@ -1464,7 +1421,7 @@ class PBSTestSuite(unittest.TestCase):
         if not mom.isUp():
             self.logger.error('mom ' + mom.shortname + ' is down after revert')
         self.server.manager(MGR_CMD_CREATE, NODE, None, mom.shortname)
-        a = {'state': 'free'}
+        a = {'state': 'free', 'resources_available.ncpus': (GE, 1)}
         self.server.expect(NODE, a, id=mom.shortname, interval=1)
         return mom
 
@@ -1540,7 +1497,6 @@ class PBSTestSuite(unittest.TestCase):
         self.logger.info('stopping process monitoring')
         self._procmon.stop()
         self.metrics_data['procs'] = self._procmon.db_proc_info
-        self.set_test_measurements(self.metrics_data)
         self._process_monitoring = False
 
     def skipTest(self, reason=None):
@@ -1592,7 +1548,7 @@ class PBSTestSuite(unittest.TestCase):
         svr.cleanup_reservations()
         # Delete vnodedef file & vnodes
         for m in moms:
-            # Check if vnsodedef file is present
+            # Check if vnodedef file is present
             if moms[m].has_vnode_defs():
                 moms[m].delete_vnode_defs()
                 moms[m].delete_vnodes()
@@ -1602,63 +1558,43 @@ class PBSTestSuite(unittest.TestCase):
         # Delete queues
         svr.delete_queues()
 
-    @classmethod
-    def comm_init(cls):
-
-        cls.server = Server()
-
-    def upgrade_tearDown(self):
-        self.upgrade.pbs_operation("uninstall")
-        self.upgrade.pbs_operation("install", self.upgrade.base_pbs_path)
-        lic_det = {'pbs_license_info': self.upgrade.base_lic}
-        self.server.manager(MGR_CMD_SET, SERVER, lic_det)
-        PBSUpgradeUtils.reload_ptl()
-        from ptl.lib.pbs_testlib import Server, MoM, Job, Scheduler, PBSService
-        self.server = Server()
-        self.init_comms()
-        self.init_moms()
-        for sched_val in self.scheds:
-            self.sched = Scheduler(server=self.server)
-            self.scheds[sched_val] = self.sched
-
-    def tearDown(self):
-        """
-        verify that ``server`` and ``scheduler`` are up
-        clean up jobs and reservations
-        """
-        if self.conf:
-            self.set_test_measurements({'testconfig': self.testconf})
-        if 'skip-teardown' in self.conf:
-            return
-        self.log_enter_teardown()
-        self.server.cleanup_jobs()
-        self.stop_proc_monitor()
-
-        for server in self.servers.values():
-            server.cleanup_files()
-        for mom in self.moms.values():
-            mom.cleanup_files()
-
-        for sched in self.scheds:
-            self.scheds[sched].cleanup_files()
-        if self.use_cur_setup:
-            self.delete_current_state(self.server, self.moms)
-            ret = self.server.load_configuration(self.saved_file)
-            if not ret:
-                raise Exception("Failed to load test setup")
-        self.log_end_teardown()
-
-    @classmethod
-    def tearDownClass(cls):
-        cls._testMethodName = 'tearDownClass'
-        if cls.use_cur_setup:
-            PBSTestSuite.delete_current_state(cls.server, cls.moms)
-            PBSTestSuite.config_saved = False
-            ret = cls.server.load_configuration(cls.saved_file)
-            if not ret:
-                raise Exception("Failed to load custom setup")
-        if cls.use_cur_setup:
-            cls.du.rm(path=cls.saved_file)
+    def parse_params(self):
+        msg = "PLEASE PROVIDE PROPER PARAMS"
+        if ('base_pbs_path' in self.conf.keys()) and (
+                'upgrade_pbs_path' in self.conf.keys()):
+            if self.du.isdir(
+                    path=self.conf['base_pbs_path']) and self.du.isdir(
+                    path=self.conf['upgrade_pbs_path']):
+                self.base_pbs_path = self.conf['base_pbs_path']
+                self.upgrade_pbs_path = self.conf['upgrade_pbs_path']
+            else:
+                msg = "PBS dir is not present"
+                self.skipTest(msg)
+        else:
+            self.skipTest(msg)
+        if ('base_ptl_path' in self.conf.keys()) and (
+                'upgrade_ptl_path' in self.conf.keys()):
+            if self.du.isdir(
+                    path=self.conf['base_ptl_path']) and self.du.isdir(
+                    path=self.conf['upgrade_ptl_path']):
+                self.upgrade_ptl_path = self.conf['upgrade_ptl_path']
+                self.base_ptl_path = self.conf['base_ptl_path']
+            else:
+                msg = "PTL params are not present"
+                self.skipTest(msg)
+        else:
+            self.skipTest(msg)
+        self.upgrade_lic = None
+        if 'upgrade_lic' in self.conf.keys():
+            if self.du.isfile(path=self.conf['upgrade_lic']):
+                self.upgrade_lic = self.conf['upgrade_lic']
+            elif '@' in self.conf['lic']:
+                response = os.system("ping -c 4 " + cls.conf['upgrade_lic'])
+                if response == 0:
+                    self.lic = self.conf['lic']
+            else:
+                msg = "Upgrade license is not proper"
+                self.skipTest(msg)
 
     def upgrade_pbs(self):
         base_lic = self.server.status(SERVER)[0]['pbs_license_info']
@@ -1699,3 +1635,45 @@ class PBSTestSuite(unittest.TestCase):
         self.server.expect(NODE, {'state': 'down'},
                            id=self.mom.shortname, op=NE)
         self.du.set_pbs_config(self.mom.hostname, confs={'PBS_START_MOM': 1})
+
+
+    def tearDown(self):
+        """
+        verify that ``server`` and ``scheduler`` are up
+        clean up jobs and reservations
+        """
+        if self.conf:
+            self.set_test_measurements({'testconfig': self.testconf})
+        if 'skip-teardown' in self.conf:
+            return
+        self.log_enter_teardown()
+        self.server.cleanup_jobs()
+        self.stop_proc_monitor()
+
+        for server in self.servers.values():
+            server.cleanup_files()
+
+        for mom in self.moms.values():
+            mom.cleanup_files()
+
+        for sched in self.scheds:
+            self.scheds[sched].cleanup_files()
+        if self.use_cur_setup:
+            self.delete_current_state(self.server, self.moms)
+            ret = self.server.load_configuration(self.saved_file)
+            if not ret:
+                raise Exception("Failed to load test setup")
+        self.log_end_teardown()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._testMethodName = 'tearDownClass'
+        if cls.use_cur_setup:
+            PBSTestSuite.delete_current_state(cls.server, cls.moms)
+            PBSTestSuite.config_saved = False
+            ret = cls.server.load_configuration(cls.saved_file)
+            if not ret:
+                raise Exception("Failed to load custom setup")
+        if cls.use_cur_setup:
+            cls.du.rm(path=cls.saved_file)
+
