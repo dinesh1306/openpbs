@@ -200,9 +200,9 @@ def requirements(*args, **kwargs):
 
 def upgrade(function):
     def wrapper(self, *args, **kwargs):
-         self.parse_params()
-         function(self, *args, **kwargs)
-         self.upgrade_tearDown()
+        self.parse_params()
+        function(self, *args, **kwargs)
+        self.upgrade_tearDown()
     wrapper.__doc__ = function.__doc__
     wrapper.__name__ = function.__name__
     return wrapper
@@ -833,7 +833,7 @@ class PBSTestSuite(unittest.TestCase):
         """
         try:
             server = cls.servers[server]
-        except:
+        except BaseException:
             server = None
         return Comm(hostname, pbsconf_file=pbsconf_file, server=server)
 
@@ -853,7 +853,7 @@ class PBSTestSuite(unittest.TestCase):
         """
         try:
             server = cls.servers[server]
-        except:
+        except BaseException:
             server = None
         return Scheduler(hostname=hostname, server=server,
                          pbsconf_file=pbsconf_file)
@@ -873,7 +873,7 @@ class PBSTestSuite(unittest.TestCase):
         """
         try:
             server = cls.servers[server]
-        except:
+        except BaseException:
             server = None
         return MoM(hostname, pbsconf_file=pbsconf_file, server=server)
 
@@ -1618,6 +1618,7 @@ class PBSTestSuite(unittest.TestCase):
         self.upgrade.reload_ptl()
         from ptl.lib.pbs_testlib import Server, MoM, Job, Scheduler
         from ptl.utils.pbs_dshutils import DshUtils
+
         server = Server()
         self.du = DshUtils()
         sched_action = ExpectAction('kicksched', True, JOB,
@@ -1635,7 +1636,6 @@ class PBSTestSuite(unittest.TestCase):
         self.server.expect(NODE, {'state': 'down'},
                            id=self.mom.shortname, op=NE)
         self.du.set_pbs_config(self.mom.hostname, confs={'PBS_START_MOM': 1})
-
 
     def tearDown(self):
         """
@@ -1676,4 +1676,3 @@ class PBSTestSuite(unittest.TestCase):
                 raise Exception("Failed to load custom setup")
         if cls.use_cur_setup:
             cls.du.rm(path=cls.saved_file)
-
