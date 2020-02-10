@@ -52,6 +52,7 @@ import ptl
 from ptl.lib.pbs_testlib import *
 from ptl.utils.pbs_cliutils import CliUtils
 from ptl.utils.pbs_dshutils import DshUtils
+from ptl.utils.pbs_upgradeutils import PBSUpgradeUtils
 from ptl.utils.pbs_logutils import PBSLogAnalyzer
 from ptl.utils.pbs_procutils import ProcMonitor
 from ptl.utils.pbs_testusers import *
@@ -75,6 +76,7 @@ NUMNODES = 'numnodes'
 TIMEOUT_KEY = '__testcase_timeout__'
 MINIMUM_TESTCASE_TIMEOUT = 600
 REQUIREMENTS_KEY = '__PTL_REQS_LIST__'
+#IS_UPGRADE = False
 
 # unit of min_ram and min_disk is GB
 default_requirements = {
@@ -108,7 +110,19 @@ def skip(reason="Skipped test execution"):
     return wrapper
 
 
-def timeout(val):
+def upgrade(function):
+
+    def wrapper(self, *args, **kwargs):
+        self.parse_params()
+        function(self, *args, **kwargs)
+        self.upgrade_tearDown()
+
+    wrapper.__doc__ = function.__doc__
+    wrapper.__name__ = function.__name__
+    return wrapper
+
+
+def timeout(function):
     """
     Decorator to set timeout value of test case
     """
@@ -209,7 +223,7 @@ def testparams(**kwargs):
         def wrapper(self, *args):
             for key, value in kwargs.items():
                 keyname = type(self).__name__ + "." + key
-                if keyname not in self.conf.keys():
+                if keyname not in cls.conf.keys():
                     self.conf[keyname] = value
                     self.testconf[keyname] = value
                 else:
@@ -417,6 +431,7 @@ class PBSTestSuite(unittest.TestCase):
     testconf = {}
     param = None
     du = DshUtils()
+    upgrade = None
     _procmon = None
     _process_monitoring = False
     revert_to_defaults = True
@@ -440,6 +455,7 @@ class PBSTestSuite(unittest.TestCase):
     scheds = {}
     moms = None
     comms = None
+    is_upgrade = False
 
     @classmethod
     def setUpClass(cls):
@@ -630,6 +646,43 @@ class PBSTestSuite(unittest.TestCase):
                     return True
             time.sleep(i)
         return False
+
+    def parse_params(self):
+        msg = "PLEASE PROVIDE PROPER PARAMS"
+        if 'base_pbs_path' in self.conf.keys() and 'upgrade_pbs_path' in self.conf.keys():
+            if self.du.isdir(
+                    path=self.conf['base_pbs_path']) and self.du.isdir(
+                    path=self.conf['upgrade_pbs_path']):
+                self.base_pbs_path = self.conf['base_pbs_path']
+                self.upgrade_pbs_path = self.conf['upgrade_pbs_path']
+            else:
+                msg = "PBS dir is not present"
+                self.skipTest(msg)
+        else:
+            self.skipTest(msg)
+        if 'base_ptl_path' in self.conf.keys() and 'upgrade_ptl_path' in self.conf.keys():
+            print("in parse")
+            if self.du.isdir(
+                    path=self.conf['base_ptl_path']) and self.du.isdir(
+                    path=self.conf['upgrade_ptl_path']):
+                self.upgrade_ptl_path = self.conf['upgrade_ptl_path']
+                self.base_ptl_path = self.conf['base_ptl_path']
+            else:
+                msg = "PTL params are not present"
+                self.skipTest(msg)
+        else:
+            self.skipTest(msg)
+        self.upgrade_lic = None
+        if 'upgrade_lic' in self.conf.keys():
+            if self.du.isfile(path=self.conf['upgrade_lic']):
+                self.upgrade_lic = self.conf['upgrade_lic']
+            elif '@' in self.conf['lic']:
+                response = os.system("ping -c 4 " + cls.conf['upgrade_lic'])
+                if response == 0:
+                    self.lic = self.conf['lic']
+            else:
+                msg = "Upgrade license is not proper"
+                self.skipTest(msg)
 
     @classmethod
     def init_from_conf(cls, conf, single=None, multiple=None, skip=None,
@@ -1538,7 +1591,7 @@ class PBSTestSuite(unittest.TestCase):
         svr.cleanup_reservations()
         # Delete vnodedef file & vnodes
         for m in moms:
-            # Check if vnodedef file is present
+            # Check if vnsodedef file is present
             if moms[m].has_vnode_defs():
                 moms[m].delete_vnode_defs()
                 moms[m].delete_vnodes()
@@ -1547,6 +1600,25 @@ class PBSTestSuite(unittest.TestCase):
         svr.delete_nodes()
         # Delete queues
         svr.delete_queues()
+
+    @classmethod
+    def comm_init(cls):
+
+        cls.server = Server()
+
+    def upgrade_tearDown(self):
+        self.upgrade.pbs_operation("uninstall")
+        self.upgrade.pbs_operation("install", self.upgrade.base_pbs_path)
+        lic_det = {'pbs_license_info': self.upgrade.base_lic}
+        self.server.manager(MGR_CMD_SET, SERVER, lic_det)
+        PBSUpgradeUtils.reload_ptl()
+        from ptl.lib.pbs_testlib import Server, MoM, Job, Scheduler, PBSService
+        self.server = Server()
+        self.init_comms()
+        self.init_moms()
+        for sched_val in self.scheds:
+            self.sched = Scheduler(server=self.server)
+            self.scheds[sched_val] = self.sched
 
     def tearDown(self):
         """
@@ -1563,7 +1635,6 @@ class PBSTestSuite(unittest.TestCase):
 
         for server in self.servers.values():
             server.cleanup_files()
-
         for mom in self.moms.values():
             mom.cleanup_files()
 
@@ -1587,3 +1658,45 @@ class PBSTestSuite(unittest.TestCase):
                 raise Exception("Failed to load custom setup")
         if cls.use_cur_setup:
             cls.du.rm(path=cls.saved_file)
+
+    def upgrade_pbs(self):
+        base_lic = self.server.status(SERVER)[0]['pbs_license_info']
+        self.upgrade = PBSUpgradeUtils(
+            self.base_pbs_path,
+            self.upgrade_pbs_path,
+            self.base_ptl_path,
+            self.upgrade_ptl_path,
+            base_lic,
+            self.upgrade_lic,
+            self.server,
+            self.scheduler,
+            self.mom,
+            self.comm)
+
+        for mom_val in self.moms.values():
+            mom_val.signal('-INT')
+        self.server.pi.initd(op='stop', daemon='all')
+
+        self.upgrade.pbs_operation("upgrade", self.conf['upgrade_pbs_path'])
+        self.upgrade.reload_ptl()
+        from ptl.lib.pbs_testlib import Server, MoM, Job, Scheduler
+        from ptl.utils.pbs_dshutils import DshUtils
+        #from ptl.lib.pbs_testlib import Job as Job
+        server = Server()
+        self.du = DshUtils()
+        sched_action = ExpectAction('kicksched', True, JOB,
+                                    self.kicksched_action)
+        self.server.add_expect_action(action=sched_action)
+        self.du.set_pbs_config(confs={'PBS_START_MOM': 0})
+        self.server.pi.initd(op='start', daemon='all')
+        self.is_server_licensed(server)
+        self.init_moms()
+        self.init_comms()
+        for sched_val in self.scheds:
+            sched = Scheduler(server=self.server)
+            self.scheds[sched_val] = sched
+        self.mom.start(args=['-p'])
+        self.server.expect(NODE, {'state': 'down'},
+                           id=self.mom.shortname, op=NE)
+        self.du.set_pbs_config(self.mom.hostname, confs={'PBS_START_MOM': 1})
+        return Job
