@@ -76,7 +76,7 @@ NUMNODES = 'numnodes'
 TIMEOUT_KEY = '__testcase_timeout__'
 MINIMUM_TESTCASE_TIMEOUT = 600
 REQUIREMENTS_KEY = '__PTL_REQS_LIST__'
-#IS_UPGRADE = False
+# IS_UPGRADE = False
 
 # unit of min_ram and min_disk is GB
 default_requirements = {
@@ -649,7 +649,8 @@ class PBSTestSuite(unittest.TestCase):
 
     def parse_params(self):
         msg = "PLEASE PROVIDE PROPER PARAMS"
-        if 'base_pbs_path' in self.conf.keys() and 'upgrade_pbs_path' in self.conf.keys():
+        if ('base_pbs_path' in self.conf.keys()) and (
+                'upgrade_pbs_path' in self.conf.keys()):
             if self.du.isdir(
                     path=self.conf['base_pbs_path']) and self.du.isdir(
                     path=self.conf['upgrade_pbs_path']):
@@ -660,8 +661,8 @@ class PBSTestSuite(unittest.TestCase):
                 self.skipTest(msg)
         else:
             self.skipTest(msg)
-        if 'base_ptl_path' in self.conf.keys() and 'upgrade_ptl_path' in self.conf.keys():
-            print("in parse")
+        if ('base_ptl_path' in self.conf.keys()) and (
+                'upgrade_ptl_path' in self.conf.keys()):
             if self.du.isdir(
                     path=self.conf['base_ptl_path']) and self.du.isdir(
                     path=self.conf['upgrade_ptl_path']):
@@ -1681,7 +1682,7 @@ class PBSTestSuite(unittest.TestCase):
         self.upgrade.reload_ptl()
         from ptl.lib.pbs_testlib import Server, MoM, Job, Scheduler
         from ptl.utils.pbs_dshutils import DshUtils
-        #from ptl.lib.pbs_testlib import Job as Job
+        # from ptl.lib.pbs_testlib import Job as Job
         server = Server()
         self.du = DshUtils()
         sched_action = ExpectAction('kicksched', True, JOB,
