@@ -1618,7 +1618,7 @@ class PBSTestSuite(unittest.TestCase):
         self.upgrade.reload_ptl()
         from ptl.lib.pbs_testlib import Server, MoM, Job, Scheduler
         from ptl.utils.pbs_dshutils import DshUtils
-
+        global Job
         server = Server()
         self.du = DshUtils()
         sched_action = ExpectAction('kicksched', True, JOB,
@@ -1636,6 +1636,20 @@ class PBSTestSuite(unittest.TestCase):
         self.server.expect(NODE, {'state': 'down'},
                            id=self.mom.shortname, op=NE)
         self.du.set_pbs_config(self.mom.hostname, confs={'PBS_START_MOM': 1})
+
+    def upgrade_tearDown(self):
+        self.upgrade.pbs_operation("uninstall")
+        self.upgrade.pbs_operation("install", self.upgrade.base_pbs_path)
+        lic_det = {'pbs_license_info': self.upgrade.base_lic}
+        self.server.manager(MGR_CMD_SET, SERVER, lic_det)
+        PBSUpgradeUtils.reload_ptl()
+        from ptl.lib.pbs_testlib import Server, MoM, Job, Scheduler, PBSService
+        self.server = Server()
+        self.init_comms()
+        self.init_moms()
+        for sched_val in self.scheds:
+            self.sched = Scheduler(server=self.server)
+            self.scheds[sched_val] = self.sched
 
     def tearDown(self):
         """
