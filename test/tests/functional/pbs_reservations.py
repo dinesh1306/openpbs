@@ -1432,7 +1432,7 @@ class TestReservations(TestFunctional):
              'Resource_List.select': '1:ncpus=4',
              'Resource_List.walltime': '5'}
         j2 = Job(TEST_USER, attrs=a)
-        j2.set_sleep_time(5)
+        j2.set_sleep_time(8)
         jid2 = self.server.submit(j2)
         subjid = []
         for i in range(1, 10):
