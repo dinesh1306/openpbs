@@ -1521,19 +1521,19 @@ class TestReservations(TestFunctional):
         self.common_steps()
 
         # Submit job j to consume all resources
-        a = {'Resource_List.walltime': '5',
+        a = {'Resource_List.walltime': '10',
              'Resource_List.select': '1:ncpus=4'}
         j = Job(TEST_USER, attrs=a)
-        j.set_sleep_time(5)
+        j.set_sleep_time(10)
         jid = self.server.submit(j)
         self.server.expect(JOB, {'job_state': 'R'}, jid)
 
         # Submit a job-array j2
         a = {ATTR_J: '1-5',
              'Resource_List.select': '1:ncpus=1',
-             'Resource_List.walltime': '10'}
+             'Resource_List.walltime': '30'}
         j2 = Job(TEST_USER, attrs=a)
-        j2.set_sleep_time(10)
+        j2.set_sleep_time(30)
         jid2 = self.server.submit(j2)
         subjid = []
         for i in range(1, 5):
@@ -1547,14 +1547,14 @@ class TestReservations(TestFunctional):
                                             jid=jid2)
         rid1_q = rid1.split('.')[0]
         exp_attr = {'reserve_state': (MATCH_RE, "RESV_CONFIRMED|2"),
-                    'reserve_duration': 10}
+                    'reserve_duration': 30}
         self.server.expect(RESV, exp_attr, id=rid1)
         self.server.expect(
             JOB, {'job_state': 'Q', 'queue': rid1_q}, id=subjid[0])
 
         # Submit another job-array j3 same as j2
         j3 = Job(TEST_USER, attrs=a)
-        j3.set_sleep_time(10)
+        j3.set_sleep_time(30)
         jid3 = self.server.submit(j3)
         subjid2 = []
         for i in range(1, 5):
