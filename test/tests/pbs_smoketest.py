@@ -827,15 +827,14 @@ class SmokeTest(PBSTestSuite):
         """
         Test for mom dynamin resource
         """
-        script_body = '/bin/echo 3'
+        script_body = 'echo 3'
         attr = {'type': 'float', 'flag': 'nh'}
         self.server.manager(MGR_CMD_CREATE, RSC, attr, id='foo')
         self.scheduler.set_sched_config({'mom_resources': "foo"},
                                         validate=True)
         self.scheduler.add_resource('foo')
 
-        self.mom.add_mom_dyn_res('foo', script_body, prefix='mom_resc',
-                                 suffix='.scr')
+        self.mom.add_mom_dyn_res('foo', script_body, prefix='mom_resc')
         attr = {'Resource_List.foo': 2}
         j = Job(TEST_USER, attrs=attr)
         jid = self.server.submit(j)
