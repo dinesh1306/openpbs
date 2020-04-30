@@ -562,8 +562,7 @@ class SmokeTest(PBSTestSuite):
         try:
             self.server.expect(JOB, {'job_state': 'R'}, id=jid)
         except Exception as e:
-            print(e.msg)
-            print(self.server.status(JOB, jid))
+            print(self.server.status(JOB, id=jid, extend='x'))
         self.logger.info("Testing script with extension")
         j = Job(TEST_USER)
         fn = self.du.create_temp_file(suffix=".scr", body="/bin/sleep 10",
