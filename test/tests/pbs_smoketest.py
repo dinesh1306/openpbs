@@ -1179,45 +1179,6 @@ class SmokeTest(PBSTestSuite):
                                    {'session_id': (NOT, self.isSuspended)},
                                    id=job['id'])
 
-    @timeout(720)
-    def test_resource_delete(self):
-        """
-        Verify behavior of resource deletion when the resource is defined
-        on a PBS object by varying over all permutations of types and flags
-        """
-
-        self.obj_map = {QUEUE: self.server.default_queue,
-                        SERVER: self.server.name,
-                        NODE: self.mom.shortname,
-                        JOB: None, RESV: None}
-        try:
-            self.server.status(RSC, id=self.resc_name)
-            self.server.manager(MGR_CMD_DELETE, RSC,
-                                id=self.resc_name, logerr=False)
-        except (PbsManagerError, PbsStatusError):
-            pass
-        count = 0
-        starttime = int(time.time())
-        try:
-            for k in self.objs:
-                if k not in self.obj_map:
-                    self.logger.error('can not map object ' + k)
-                    continue
-                v = self.obj_map[k]
-                for t in self.resc_types:
-                    for f in self.resc_flags:
-                        for c in self.resc_flags_ctl:
-                            self.delete_resource_helper(
-                                self.resc_name, t, f, c, k, v)
-                            self.logger.info("")
-                            count += 1
-        except TimeOut:
-            raise
-        finally:
-            endtime = int(time.time())
-            self.logger.info("test_resource_delete, took %s seconds, "
-                             "count:%s" % (endtime - starttime, count))
-
     def setup_fs(self, formula):
 
         # change resource group file and validate after all the changes are in
