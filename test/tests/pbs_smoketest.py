@@ -1179,6 +1179,118 @@ class SmokeTest(PBSTestSuite):
                                    {'session_id': (NOT, self.isSuspended)},
                                    id=job['id'])
 
+        def create_resource_helper(self, r, t, f, c):
+        """
+        create a resource with associated type, flag, and control flag
+
+        r - The resource name
+
+        t - Type of the resource
+
+        f - Permissions/flags associated to the resource
+
+        c - Control flags
+
+        This method handles expected errors for invalid settings
+        """
+
+        expect_error = self.expect_error(t, f)
+        attr = {}
+        if t is not None:
+            attr['type'] = t
+        if f is not None:
+            attr['flag'] = f
+        if c:
+            if 'flag' in attr:
+                attr['flag'] += c
+            else:
+                attr['flag'] = c
+        if len(attr) == 0:
+            attr = None
+        try:
+            rc = self.server.manager(MGR_CMD_CREATE, RSC, attr, id=r,
+                                     logerr=False)
+            msg = None
+        except PbsManagerError as e:
+            rc = e.rc
+            msg = e.msg
+        if expect_error:
+            if msg:
+                m = 'Expected error contains "Erroneous to have"'
+                self.logger.info(m + ' in ' + msg[0])
+                self.assertTrue('Erroneous to have' in msg[0])
+            self.assertNotEqual(rc, 0)
+            return False
+        else:
+            self.assertEqual(rc, 0)
+            self.server.manager(MGR_CMD_LIST, RSC, id=r)
+            rv = self.server.resources[r].attributes['type']
+            if t is None:
+                self.assertEqual(rv, 'string')
+            else:
+                self.assertEqual(rv, t)
+            _f = ''
+            if f is not None:
+                _f = f
+            if c is not None:
+                _f += c
+            if _f:
+                rv = self.server.resources[r].attributes['flag']
+                self.assertEqual(sorted(rv), sorted(_f))
+        return True
+
+    def expect_error(self, t, f):
+        """
+        Returns true for invalid combinations of flag and/or type
+        """
+        if (f in ['nh', 'f', 'fh', 'n', 'q'] and
+                t in [None, 'string', 'string_array', 'boolean']):
+            return True
+        if (f == 'n' and t in [None, 'long', 'float', 'size']):
+            return True
+        if (f == 'f' and t in [None, 'long', 'float', 'size']):
+            return True
+        return False
+
+    def test_resource_create(self):
+        """
+        Test behavior of resource creation by permuting over all possible and
+        supported types and flags
+        """
+        rc = self.server.manager(MGR_CMD_CREATE, RSC, id=self.resc_name)
+        self.assertEqual(rc, 0)
+        rc = self.server.manager(MGR_CMD_LIST, RSC, id=self.resc_name)
+        self.assertEqual(rc, 0)
+        rsc = self.server.resources[self.resc_name]
+        self.assertEqual(rsc.attributes['type'], 'string')
+        self.logger.info(self.server.logprefix +
+                         ' verify that default resource type is string...OK')
+        self.logger.info(self.server.logprefix +
+                         ' verify that duplicate resource creation fails')
+        # check that duplicate is not allowed
+        try:
+            rc = self.server.manager(MGR_CMD_CREATE, RSC, None,
+                                     id=self.resc_name,
+                                     logerr=True)
+        except PbsManagerError as e:
+            rc = e.rc
+            msg = e.msg
+        self.assertNotEqual(rc, 0)
+        self.assertTrue('Duplicate entry' in msg[0])
+        self.logger.info('Expected error: Duplicate entry in ' + msg[0] +
+                         ' ...OK')
+        rc = self.server.manager(MGR_CMD_DELETE, RSC, id=self.resc_name)
+        self.assertEqual(rc, 0)
+        for t in self.resc_types:
+            for f in self.resc_flags:
+                for c in self.resc_flags_ctl:
+                    rv = self.create_resource_helper(self.resc_name, t, f, c)
+                    if rv:
+                        rc = self.server.manager(MGR_CMD_DELETE, RSC,
+                                                 id=self.resc_name)
+                        self.assertEqual(rc, 0)
+                        self.logger.info("")
+
     def setup_fs(self, formula):
 
         # change resource group file and validate after all the changes are in
