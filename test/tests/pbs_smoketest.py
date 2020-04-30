@@ -1179,7 +1179,7 @@ class SmokeTest(PBSTestSuite):
                                    {'session_id': (NOT, self.isSuspended)},
                                    id=job['id'])
 
-        def create_resource_helper(self, r, t, f, c):
+    def create_resource_helper(self, r, t, f, c):
         """
         create a resource with associated type, flag, and control flag
 
