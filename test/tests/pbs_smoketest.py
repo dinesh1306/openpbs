@@ -552,12 +552,18 @@ class SmokeTest(PBSTestSuite):
         """
         Test to submit job with job script
         """
+        a = {'job_history_enable': 'True'}
+        self.server.manager(MGR_CMD_SET, SERVER, a)
         a = {ATTR_rescavail + '.ncpus': '2'}
         self.server.manager(MGR_CMD_SET, NODE, a, id=self.mom.shortname)
         j = Job(TEST_USER, attrs={ATTR_N: 'test'})
         j.create_script('sleep 120\n', hostname=self.server.client)
         jid = self.server.submit(j)
-        self.server.expect(JOB, {'job_state': 'R'}, id=jid)
+        try:
+            self.server.expect(JOB, {'job_state': 'R'}, id=jid)
+        except Exception as e:
+            print(e.msg)
+            print(self.server.status(JOB, jid))
         self.logger.info("Testing script with extension")
         j = Job(TEST_USER)
         fn = self.du.create_temp_file(suffix=".scr", body="/bin/sleep 10",
