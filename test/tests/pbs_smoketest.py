@@ -1252,43 +1252,103 @@ class SmokeTest(PBSTestSuite):
             return True
         return False
 
-    def test_resource_create(self):
+    def delete_resource_helper(self, r, t, f, c, obj_type, obj_id):
         """
-        Test behavior of resource creation by permuting over all possible and
-        supported types and flags
+        Vierify behavior upon deleting a resource that is set on a PBS object.
+
+        r - The resource to create and later on delete
+
+        t - The type of resource
+
+        f - The permissions/flags of the resource
+
+        c - The control flags of the resource
+
+        obj_type - The object type (server, queue, node, job, reservation) on
+        which the resource is set.
+
+        obj_id - The object identifier/name
         """
-        rc = self.server.manager(MGR_CMD_CREATE, RSC, id=self.resc_name)
-        self.assertEqual(rc, 0)
-        rc = self.server.manager(MGR_CMD_LIST, RSC, id=self.resc_name)
-        self.assertEqual(rc, 0)
-        rsc = self.server.resources[self.resc_name]
-        self.assertEqual(rsc.attributes['type'], 'string')
-        self.logger.info(self.server.logprefix +
-                         ' verify that default resource type is string...OK')
-        self.logger.info(self.server.logprefix +
-                         ' verify that duplicate resource creation fails')
-        # check that duplicate is not allowed
+        ar = 'resources_available.' + r
+        rv = self.create_resource_helper(self.resc_name, t, f, c)
+        if rv:
+            if t in ['long', 'float', 'size', 'boolean']:
+                val = 0
+            else:
+                val = 'abc'
+            if obj_type in [JOB, RESV]:
+                if obj_type == JOB:
+                    j = Job(TEST_USER1, {'Resource_List.' + r: val})
+                else:
+                    j = Reservation(TEST_USER1, {'Resource_List.' + r: val})
+                try:
+                    jid = self.server.submit(j)
+                except PbsSubmitError as e:
+                    jid = e.rv
+                if c is not None and ('r' in c or 'i' in c):
+                    self.assertEqual(jid, None)
+                    self.logger.info('Verify that job/resv can not request '
+                                     'invibile or read-only resource...OK')
+                    self.server.manager(MGR_CMD_DELETE, RSC, id=r)
+                    # done with the test case, just return
+                    return
+                if obj_type == RESV:
+                    a = {'reserve_state': (MATCH_RE, "RESV_CONFIRMED|2")}
+                    self.server.expect(RESV, a, id=jid)
+                self.assertNotEqual(jid, None)
+            else:
+                self.server.manager(MGR_CMD_SET, obj_type, {ar: val},
+                                    id=obj_id)
+            try:
+                rc = self.server.manager(MGR_CMD_DELETE, RSC, id=r,
+                                         logerr=False)
+                msg = None
+            except PbsManagerError as e:
+                rc = e.rc
+                msg = e.msg
+            if obj_type in [JOB, RESV]:
+                self.assertNotEqual(rc, 0)
+                if msg:
+                    m = "Resource busy on " + PBS_OBJ_MAP[obj_type]
+                    self.logger.info('Expecting qmgr error: ' + m + ' in ' +
+                                     msg[0])
+                    self.assertTrue(m in msg[0])
+                self.server.delete(jid)
+                self.server.expect(obj_type, 'queue', op=UNSET)
+                self.server.manager(MGR_CMD_DELETE, RSC, id=r)
+            else:
+                self.assertEqual(rc, 0)
+                d = self.server.status(obj_type, ar, id=obj_id)
+                if d and len(d) > 0:
+                    self.assertFalse(ar in d[0])
+
+    @timeout(720)
+    def test_resource_delete(self):
+        """
+        Verify behavior of resource deletion when the resource is defined
+        on a PBS object by varying over all permutations of types and flags
+        """
+
+        self.obj_map = {QUEUE: self.server.default_queue,
+                        SERVER: self.server.name,
+                        NODE: self.mom.shortname,
+                        JOB: None, RESV: None}
         try:
-            rc = self.server.manager(MGR_CMD_CREATE, RSC, None,
-                                     id=self.resc_name,
-                                     logerr=True)
-        except PbsManagerError as e:
-            rc = e.rc
-            msg = e.msg
-        self.assertNotEqual(rc, 0)
-        self.assertTrue('Duplicate entry' in msg[0])
-        self.logger.info('Expected error: Duplicate entry in ' + msg[0] +
-                         ' ...OK')
-        rc = self.server.manager(MGR_CMD_DELETE, RSC, id=self.resc_name)
-        self.assertEqual(rc, 0)
-        for t in self.resc_types:
-            for f in self.resc_flags:
-                for c in self.resc_flags_ctl:
-                    rv = self.create_resource_helper(self.resc_name, t, f, c)
-                    if rv:
-                        rc = self.server.manager(MGR_CMD_DELETE, RSC,
-                                                 id=self.resc_name)
-                        self.assertEqual(rc, 0)
+            self.server.status(RSC, id=self.resc_name)
+            self.server.manager(MGR_CMD_DELETE, RSC,
+                                id=self.resc_name, logerr=False)
+        except (PbsManagerError, PbsStatusError):
+            pass
+        for k in self.objs:
+            if k not in self.obj_map:
+                self.logger.error('can not map object ' + k)
+                continue
+            v = self.obj_map[k]
+            for t in self.resc_types:
+                for f in self.resc_flags:
+                    for c in self.resc_flags_ctl:
+                        self.delete_resource_helper(
+                            self.resc_name, t, f, c, k, v)
                         self.logger.info("")
 
     def setup_fs(self, formula):
