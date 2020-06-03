@@ -1746,8 +1746,9 @@ class BatchUtils(object):
                     _e = len(lines) - 1
                     lines[_e] = lines[_e].strip('\r\n\t') + \
                         l[i].strip('\r\n\t')
+                    attr_tab = True
                 elif (not l[i].startswith(' ') and i > count and
-                      l[i - count].startswith('\t')):
+                      l[i - count].startswith('\t')) and not attr_tab:
                     _e = len(lines) - count
                     lines[_e] = lines[_e] + l[i]
                     if ((i + 1) < len(l)
@@ -1757,6 +1758,7 @@ class BatchUtils(object):
                         count = 1
                 else:
                     lines.append(l[i])
+            attr_tab = False
         else:
             lines = l
 
