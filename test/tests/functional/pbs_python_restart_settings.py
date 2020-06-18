@@ -307,10 +307,10 @@ pbs.event().accept()
         # every 3s
         logs = self.server.log_match(
             "Restarting Python interpreter to reduce mem usage",
-            allmatch=True, starttime=stime, max_attempts=8)
+            allmatch=True, n='ALL')
         self.assertTrue(len(logs) > 1)
-        log1 = logs[0][1]
-        log2 = logs[1][1]
+        log1 = logs[-2][1]
+        log2 = logs[-1][1]
         tmp = log1.split(';')
         # Convert the time into epoch time
         time1 = int(self.logutils.convert_date_time(tmp[0]))
