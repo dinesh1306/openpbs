@@ -4045,6 +4045,7 @@ class PBSService(PBSObject):
         if regexp:
             infomsg += ' - using regular expression '
         if allmatch:
+            n = 'ALL'
             infomsg += ' - on all matches '
         if existence:
             infomsg += ' - with existence'
