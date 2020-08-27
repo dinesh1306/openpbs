@@ -5833,6 +5833,7 @@ class Server(PBSService):
                             return ret
                         else:
                             return [h.attributes for h in o.values()]
+                return []        
             else:
                 self.logger.error(self.logprefix + "unrecognized object type")
                 raise PbsStatusError(rc=-1, rv=[],
