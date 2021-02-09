@@ -144,7 +144,7 @@ e.accept()
         j = Job(TEST_USER, attrs={
             ATTR_J: '1-3', 'Resource_List.select': 'ncpus=1'})
 
-        j.set_sleep_time(20)
+        j.set_sleep_time(30)
 
         j_id = self.server.submit(j)
         subjid_2 = j.create_subjob_id(j_id, 2)
