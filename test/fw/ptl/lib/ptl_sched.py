@@ -169,6 +169,7 @@ class Scheduler(PBSService):
             r'Shares:[\s]*(?P<Shares>[-]*[0-9]*)[\s]*Usage:[\s]*' + \
             r'(?P<Usage>[0-9]+)[\s]*Perc:[\s]*(?P<Perc>.*)%'
     fs_tag = re.compile(fs_re)
+    restart_time = None
 
     def __init__(self, server, hostname=None, pbsconf_file=None,
                  snapmap={}, snap=None, db_access=None, id='default',
@@ -842,7 +843,11 @@ class Scheduler(PBSService):
                              preserve_permission=False, sudo=True,
                              uid=self.user)
 
+        self.log_match("Connected to all the configured servers",
+                       starttime=Scheduler.restart_time)
+ 
         self.signal('-HUP')
+ 
         if self.platform == 'cray' or self.platform == 'craysim':
             self.add_resource('vntype')
             self.add_resource('hbmem')

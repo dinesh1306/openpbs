@@ -1325,6 +1325,7 @@ class PBSTestSuite(unittest.TestCase):
 
                 if restart_pbs:
                     # Restart all
+                    Scheduler.restart_time = time.time()
                     server.pi.restart(server.hostname)
                     self._check_daemons_on_server(server, "server")
                     if new_pbsconf["PBS_START_MOM"] == "1":
